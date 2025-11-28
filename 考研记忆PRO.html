@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>记忆 Pro · 终极版 for 胡志强</title>
+    <style>
+        :root {
+            --bg-body: #f3f5f7;
+            --bg-card: #ffffff;
+            --text-main: #1f2937;
+            --text-sub: #6b7280;
+            
+            --primary: #3b82f6;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+            
+            /* 热力图精细色阶 */
+            --heat-0: rgba(16, 185, 129, 0.1);  /* 0错 (安全) */
+            --heat-1: rgba(253, 224, 71, 0.5);  /* 1-2错 (注意) */
+            --heat-2: rgba(251, 146, 60, 0.6);  /* 3-4错 (警告) */
+            --heat-3: rgba(239, 68, 68, 0.7);   /* 5-7错 (危险) */
+            --heat-4: rgba(124, 58, 237, 0.7);  /* 8+错 (重灾区) */
+
+            --radius: 16px;
+            --card-width: 720px;
+            --line-height: 2.5; 
+            --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- Header --- */
+        .header {
+            height: 64px;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 50;
+            flex-shrink: 0;
+        }
+
+        .header-left { display: flex; flex-direction: column; }
+        .brand { font-weight: 800; font-size: 1.05rem; color: var(--text-main); }
+        .subtitle { font-size: 0.75rem; color: var(--text-sub); margin-top: 2px; }
+
+        .header-actions { display: flex; gap: 10px; }
+        .icon-btn {
+            width: 38px; height: 38px;
+            border-radius: 10px;
+            border: 1px solid #e5e7eb;
+            background: #fff;
+            color: var(--text-sub);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .icon-btn:active { transform: scale(0.95); background: #f9fafb; }
+
+        /* --- Stats Dashboard --- */
+        .stats-dash {
+            background: #fff;
+            padding: 10px 0;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            border-bottom: 1px solid rgba(0,0,0,0.03);
+            flex-shrink: 0;
+        }
+        
+        .stat-box {
+            display: flex; flex-direction: column; align-items: center;
+            border-right: 1px solid #f3f4f6;
+        }
+        .stat-box:last-child { border-right: none; }
+        
+        .stat-label { font-size: 0.7rem; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-value { font-size: 1.1rem; font-weight: 700; color: var(--text-main); margin-top: 2px; }
+        .stat-value.bad { color: var(--error); }
+        .stat-value.good { color: var(--success); }
+
+        /* --- Stage --- */
+        .stage {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        .card {
+            background: var(--bg-card);
+            width: 100%;
+            max-width: var(--card-width);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 36px;
+            min-height: 400px;
+            transition: opacity 0.3s ease;
+        }
+        .card.fade-out { opacity: 0; }
+
+        .card-title {
+            font-size: 1.3rem;
+            font-weight: 800;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #f3f4f6;
+            line-height: 1.4;
+        }
+
+        .card-content {
+            font-size: 1.1rem;
+            line-height: var(--line-height);
+            color: var(--text-sub);
+            text-align: justify;
+        }
+
+        /* --- Cloze Items --- */
+        .cloze {
+            padding: 1px 4px;
+            margin: 0 2px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+            font-weight: 500;
+        }
+
+        .cloze.masked {
+            background-color: #e5e7eb;
+            color: transparent;
+            user-select: none;
+            min-width: 2.5em;
+        }
+
+        /* Focus Mode Highlight */
+        .cloze.active-focus {
+            background-color: #fffbeb;
+            color: var(--text-main);
+            border-bottom: 2px solid var(--warning);
+            box-shadow: 0 0 0 4px rgba(255,255,255,0.9), 0 0 0 6px var(--warning);
+            position: relative;
+            z-index: 1001;
+        }
+
+        .cloze.correct { color: var(--success); border-bottom-color: var(--success); cursor: default; }
+        .cloze.wrong { color: var(--error); border-bottom-color: var(--error); cursor: default; }
+
+        /* --- Heatmap Span --- */
+        .heat-span {
+            padding: 1px 3px;
+            border-radius: 4px;
+            margin: 0 1px;
+            color: #000; /* 热力图中文字始终可见 */
+        }
+
+        /* --- Footer Controls --- */
+        .footer {
+            background: #fff;
+            padding: 16px 24px;
+            border-top: 1px solid #f3f4f6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            z-index: 40;
+        }
+
+        .btn-pill {
+            border: none;
+            background: #f3f4f6;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-weight: 600;
+            color: var(--text-main);
+            cursor: pointer;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .btn-pill.primary { background: var(--text-main); color: #fff; }
+        .btn-pill:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* --- Overlays & Modals --- */
+        .overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .overlay.active { opacity: 1; pointer-events: auto; }
+
+        /* Decision Menu */
+        .pop-menu {
+            position: absolute; z-index: 1002;
+            display: none; background: #fff;
+            padding: 8px; border-radius: 12px;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.15);
+            animation: popUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes popUp { from{transform:scale(0.8) translateY(10px);opacity:0} to{transform:scale(1) translateY(0);opacity:1} }
+        
+        .d-btn {
+            border: none; padding: 10px 24px;
+            border-radius: 8px; font-weight: 600; font-size: 1rem;
+            color: #fff; cursor: pointer; margin: 0 4px;
+        }
+        .yes { background: var(--success); }
+        .no { background: var(--error); }
+
+        /* Fullscreen Modal (Heatmap & Settings) */
+        .modal-sheet {
+            position: fixed; inset: 0;
+            background: var(--bg-body);
+            z-index: 2000;
+            display: flex; flex-direction: column;
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .modal-sheet.open { transform: translateY(0); }
+
+        .sheet-header {
+            padding: 16px 24px; background: #fff;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .sheet-title { font-weight: 700; font-size: 1.1rem; }
+        
+        .sheet-body { flex: 1; overflow-y: auto; padding: 24px; max-width: 800px; margin: 0 auto; width: 100%; }
+
+        /* Legend for Heatmap */
+        .legend-bar { display: flex; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text-sub); }
+        .color-dot { width: 12px; height: 12px; border-radius: 4px; }
+
+        /* Settings UI */
+        .setting-group { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 15px; }
+        .setting-header { display: flex; justify-content: space-between; margin-bottom: 10px; font-weight: 600; }
+        input[type=range] { width: 100%; accent-color: var(--primary); }
+        
+        @media (max-width: 600px) {
+            .card { padding: 24px; border-radius: 0; min-height: 60vh; box-shadow: none; }
+            .stage { padding: 0; }
+            .header-left { flex:1; }
+            .stats-dash { padding: 10px; }
+            .stat-value { font-size: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 顶部导航 -->
+    <header class="header">
+        <div class="header-left">
+            <div class="brand">记忆 Pro</div>
+            <div class="subtitle" id="progress-text">1 / 1</div>
+        </div>
+        <div class="header-actions">
+            <button class="icon-btn" onclick="openSettings()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </button>
+            <button class="icon-btn" style="color:var(--error); border-color:var(--error); background:#fff5f5;" onclick="openHeatmap()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.1.2-2.2.5-3.3a9 9 0 0 0 2.5 2.8z"></path></svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- 数据仪表盘 -->
+    <div class="stats-dash">
+        <div class="stat-box">
+            <span class="stat-label">遗忘次数</span>
+            <span class="stat-value" id="disp-wrong-count">0</span>
+        </div>
+        <div class="stat-box">
+            <span class="stat-label">错误率</span>
+            <span class="stat-value" id="disp-error-rate">0%</span>
+        </div>
+        <div class="stat-box">
+            <span class="stat-label">平均耗时</span>
+            <span class="stat-value" id="disp-avg-time">0s</span>
+        </div>
+    </div>
+
+    <!-- 练习舞台 -->
+    <div class="stage">
+        <div class="card" id="card-container">
+            <!-- 动态内容 -->
+        </div>
+    </div>
+
+    <!-- 底部控制 -->
+    <div class="footer">
+        <button class="btn-pill" id="btn-prev" onclick="changePage(-1)">上一题</button>
+        <button class="btn-pill primary" id="btn-next" onclick="changePage(1)">下一题</button>
+    </div>
+
+    <!-- 专注模式遮罩与菜单 -->
+    <div class="overlay" id="focus-overlay"></div>
+    <div class="pop-menu" id="decision-menu">
+        <button class="d-btn yes" onclick="submitJudgment(true)">记得</button>
+        <button class="d-btn no" onclick="submitJudgment(false)">忘了</button>
+    </div>
+
+    <!-- 1. 热力图模态框 -->
+    <div class="modal-sheet" id="heatmap-modal">
+        <div class="sheet-header">
+            <div>
+                <div class="sheet-title">记忆热力图</div>
+                <div class="legend-bar">
+                    <div class="legend-item"><div class="color-dot" style="background:var(--heat-0)"></div>0次</div>
+                    <div class="legend-item"><div class="color-dot" style="background:var(--heat-1)"></div>1-2次</div>
+                    <div class="legend-item"><div class="color-dot" style="background:var(--heat-2)"></div>3-4次</div>
+                    <div class="legend-item"><div class="color-dot" style="background:var(--heat-3)"></div>5-7次</div>
+                    <div class="legend-item"><div class="color-dot" style="background:var(--heat-4)"></div>8次+</div>
+                </div>
+            </div>
+            <button class="icon-btn" onclick="closeModal('heatmap-modal')">✕</button>
+        </div>
+        <div class="sheet-body card-content" id="heatmap-content"></div>
+    </div>
+
+    <!-- 2. 设置模态框 -->
+    <div class="modal-sheet" id="settings-modal">
+        <div class="sheet-header">
+            <div class="sheet-title">学习设置</div>
+            <button class="icon-btn" onclick="closeModal('settings-modal')">✕</button>
+        </div>
+        <div class="sheet-body">
+            <div class="setting-group">
+                <div class="setting-header">
+                    <span>遮挡率 (难度)</span>
+                    <span id="setting-rate-val">50%</span>
+                </div>
+                <input type="range" id="rate-slider" min="20" max="90" step="10" value="50" oninput="updateSliderUI(this.value)">
+                <p style="font-size:0.85rem; color:#9ca3af; margin-top:10px;">
+                    注意：修改遮挡率将重新生成所有题目，并清空当前的“本次练习状态”，但会保留您的历史记忆数据（热力图数据）。
+                </p>
+            </div>
+            
+            <button class="btn-pill" style="width:100%; justify-content:center; background:#ef4444; color:#fff;" onclick="resetAllData()">
+                清空所有历史数据
+            </button>
+        </div>
+        <div class="footer">
+            <button class="btn-pill primary" style="width:100%; justify-content:center;" onclick="saveSettings()">保存并应用</button>
+        </div>
+    </div>
+
+    <script>
+        /* ================= 数据层 ================= */
+        const STORAGE_KEY = 'memory_ultimate_v5';
+        const questions = [
+    {
+        "title": "1. 叙述时域采样定理",
+        "content": "对带限信号进行等间隔采样，则采样信号的频谱是原模拟信号的频谱一采样角频率ωs = 2π/T（T 为采样间隔）为周期进行延拓后形成的。且只有当满足奈奎斯特条件，即采样频率ωs 大于等于带限信号两倍最高截止频率时，用一理想低通滤波器可以恢复原始信号。"
+    },
+    {
+        "title": "2. LT、FT、ZT、DFT、DTFT 之间的关系",
+        "content": "拉普拉斯变换将频率从实数推广为复数，因而傅里叶变换是拉普拉斯变换的特例。当 s 为纯虚数时（s = jω），x(t)的拉普拉斯变换，即为 x(t)的傅里叶变换。Z 变换是周期采样信号的拉氏变换的表达方式（z = esT）。\n离散时间傅里叶变换 DTFT 又是 Z 变换的特例。当|z| = 1，即在单位圆上时（z = ejω），得到的就是 DTFT 变换。\n离散傅里叶变换 DFT 是 DTFT 在 0 - 2π周期内的等间隔抽样（ω = 2π/N k），或等同于 Z 变换在单位圆上的等间隔抽样（z = e j2π/N k）。"
+    },
+    {
+        "title": "3. 拉式变换和 Z 变换的对应关系是什么？",
+        "content": "由对应公式 z = esT = e(σ + jω)T = r ejθ可知\ns 平面的左半平面（σ < 0）映射到 z 平面单位圆的圆内（|z| < 1）；s 平面的右半平面（σ > 0）映射到 z 平面单位圆的圆外（|z| > 1）；s 平面的虚轴（σ = 0）映射到 z 平面的单位圆（|z| = 1）；"
+    },
+    {
+        "title": "4. 什么是无失真传输，无失真传输需满足的条件是什么？",
+        "content": "信号的无失真传输要求输出响应的波形应当与系统输入激励信号的波形完全相同，而幅度大小可以不同，时间前后可有所差异。\n即满足条件公式 y(t) = K·x(t - t0)的系统称为无失真传输系统。"
+    },
+    {
+        "title": "5. 请简述什么是调制，其主要作用是什么。",
+        "content": "调制是将信号从低频段搬移到适合远距离传输的高频段的过程。其主要作用是提高信号在信道上的传输效率，或是达到信号复用的目的，或是减少传输引起的失真，或是使天线尺寸变小。"
+    },
+    {
+        "title": "6. AM、DSB、SSB 联系和区别。",
+        "content": "它们之间的联系是都为幅度调制，AM 是调幅，带载波；DSB 是抑制载波的调幅，可增加功率效率，但两个边带均传输相同的信息；SSB 单边带抑制了一个边带，相对 DSB 减少了一半带宽，因此带宽效率翻倍。"
+    },
+    {
+        "title": "7. 什么是多路复用，请简述时分复用和频分复用。",
+        "content": "将若干路信号以某种方式汇合，统一在同一信道中传输称为多路复用。\n时分复用（原理：抽样定理）：\n -fm ~ fm 的信号，可由间隔为 1/(2fm) 的抽样值惟一确定。从这些瞬时抽样值可以正确恢复原始的连续信号。信道仅在抽样瞬间被占用，其余的空闲时间可供传送第二路、第三路……等各路抽样信号使用。将各路信号的抽样值有序地排列就可实现时分复用。在接收端，这些抽样值由适当的同步检测器分离。\n频分复用：\n在发送端将各路信号频谱搬移到各不相同的频率范围，使它们互不重叠，即可复用同一信道传输；在接收端利用若干滤波器各路信号分离，再经解调还原为各路原始信号。"
+    },
+    {
+        "title": "8. 简述全通系统零极点分布特点和相频特性。",
+        "content": "（1）对于连续时间系统，全通系统的零极点关于 s 平面虚轴对称分布，零点都在虚轴右侧，极点都在虚轴左侧，相频特性是关于频率单调递减；\n（2）对于离散时间系统，全通系统的零极点关于 z 平面单位圆呈镜像对称分布，极点都在单位圆内，零点都在单位圆外，相频特性是关于频率单调递减。"
+    },
+    {
+        "title": "9. DFT频谱分析各类现象（很重要！！！）",
+        "content": "（1）频谱混叠\n原因：对信号进行采样时，当采样率过低，小于信号的最高频率的两倍时，会造成频域的混叠。\n改善措施：增加采样频率，使采样频率大于两倍最高频率；使用抗混叠滤波器，限制最高频率。\n（2）频谱泄露\n原因：对信号进行截断时，在频率相当于其频谱与窗函数的频谱进行卷积，使得频谱分量从其正常频谱扩展开来，产生拖尾、变宽现象。\n改善措施：延长窗长度，即增加截取信号长度；选择加权后的窗函数抑制旁瓣，缓慢截断；对于周期函数，整周期截断。\n（3）栅栏效应\n原因：经过离散傅里叶变换DFT计算的频谱，只在基频的整数倍上才有谱线，离散之间的频谱无法显示，如同栅栏一样，故成为栅栏效应。\n改善措施：频域上增加抽样点数N或者时域上进行补零，使谱线更密，从而获得更多信息。\n（4）谱间干扰\n原因：形成的旁瓣引起不同频率分量间的干扰，使频谱分析产生误差。\n改善措施：提高采样频率（降低频率分辨率）；用主瓣宽的窗函数。"
+    },
+    {
+        "title": "10. 什么是吉布斯现象（效应）？",
+        "content": "实际应用时，常用有限正弦项正弦波叠加逼近原周期信号。所用的谐波次数N的大小决定逼近原波形的程度，N增加，逼近的精度不断改善。但是由于对于具有不连续点的周期信号会发生一种现象：当选取的傅里叶级数的项数N增加时，合成的波形虽然更逼近原函数，但在不连续点附近会出现一个固定高度的过冲，N越大，过冲的最大值越靠近不连续点，但其峰值并不下降，而是大约等于原函数在不连续点处跳变值的9%，且在不连续点两侧呈现衰减振荡的形式。"
+    },
+    {
+        "title": "11. 叙述频域采样定理。",
+        "content": "若一有限长序列x(n)的长度为M，x(n)的Z变换在单位圆上进行N点等间隔采样得到X(k)=DFT[X(n)]。且只有当N≥M时，才可有X(k)恢复出原信号x(n)。"
+    },
+    {
+        "title": "12. 脉冲响应不变法和双线性变换法的区别",
+        "content": "脉冲响应不变法，时域逼近良好，Ω和ω线性相关，但高频处混叠失真；\n双线性变换法，解决了频率混叠问题，但Ω和ω非线性。"
+    },
+    {
+        "title": "13. 叙述IIR和FIR滤波器的区别",
+        "content": "IIR有反馈回路，FIR则没有；FIR很容易实现线性相位结构，IIR则较难；FIR滤波器的实现可以用FFT算法，IIR不能；FIR一定稳定，IIR不一定；如果不考虑相位，实现相同的幅频特性，IIR的阶数比FIR的阶数要低得多。"
+    },
+    {
+        "title": "14. IIR滤波器的级联型和并联型结构特点",
+        "content": "级联型：有利于控制频率响应，方便调节零极点，但运算速度慢。\n并联型：速度快、误差小，但只能调节极点，不能调节零点位置。"
+    },
+    {
+        "title": "15. 在时域序列尾部补零能否提高谱分辨率？为什么？",
+        "content": "不能提高分辨率，因为序列一旦确定，其DTFT也确定，尾部补零只能改变对DTFT的观察方式，只是消除或降低栅栏效应的一种手段。"
+    },
+    {
+        "title": "16. 多采样率转化的过程中可能会出现的问题以及解决方法",
+        "content": "在上采样过程中，由于频域的压缩，会出现影像频谱现象。\n解决办法：内插后的信号经过抗影像滤波器来消除影像频谱的作用。\n在下采样过程中，由于抽取会造成频域的位移和拉伸，可能会造成频谱混叠现象。\n解决办法：\n（1）增加时域采样点数，即提高采样频率\n（2）在采样之前加一个抗混叠低通滤波器（把信号中超过$\frac{f_s}{2}$的频率成分过滤掉）"
+    }
+]
+;
+
+        let appData = {
+            config: { maskRate: 0.5 },
+            currentIndex: 0,
+            /* 
+               history: { 
+                 "q0_m1": { 
+                    wrong: 2, 
+                    correct: 5, 
+                    totalTime: 4500 (ms), 
+                    attempts: 7 
+                 } 
+               } 
+            */
+            history: {}, 
+            sessionState: {} // "q0_m1": "correct" | "wrong" (UI Cache)
+        };
+
+        // 运行时变量
+        let isFocusMode = false;
+        let activeElement = null;
+        let startTime = 0; // 计时器
+
+        /* ================= 初始化 ================= */
+        function init() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                appData.config = parsed.config || { maskRate: 0.5 };
+                appData.history = parsed.history || {};
+                appData.currentIndex = parsed.currentIndex || 0;
+            }
+            // 确保索引安全
+            if (appData.currentIndex >= questions.length) appData.currentIndex = 0;
+
+            renderStage();
+            updateStats();
+        }
+
+        /* ================= 核心渲染 ================= */
+        function renderStage() {
+            const container = document.getElementById('card-container');
+            container.classList.add('fade-out');
+
+            setTimeout(() => {
+                const q = questions[appData.currentIndex];
+                let html = `<div class="card-title">${q.title}</div>`;
+                html += `<div class="card-content">${processText(q.content, appData.currentIndex, 'practice')}</div>`;
+                
+                container.innerHTML = html;
+                container.classList.remove('fade-out');
+
+                // UI 更新
+                document.getElementById('progress-text').textContent = `${appData.currentIndex + 1} / ${questions.length}`;
+                document.getElementById('btn-prev').disabled = appData.currentIndex === 0;
+                document.getElementById('btn-next').disabled = appData.currentIndex === questions.length - 1;
+            }, 300);
+        }
+
+        // 通用分词处理 (练习模式 vs 热力图模式)
+        function processText(text, qIdx, mode) {
+            let mCount = 0;
+            return text.replace(/([^，。；：、？！\s\n\(\)（）<>=]+)/g, (match) => {
+                // 基于遮挡率的随机判断
+                // 为了保持ID一致性，我们这里简化处理：
+                // 在真实项目中，应该用种子随机。这里假设MaskRate不变时，Random生成的序列大致对于同一段文本是可用的，
+                // 或者是重置了就全部重来。
+                
+                let isMasked = Math.random() < appData.config.maskRate && match.length > 1;
+
+                if (isMasked) {
+                    const id = `q${qIdx}_m${mCount++}`;
+                    
+                    if (mode === 'heatmap') {
+                        // 热力图模式：根据历史数据上色
+                        const rec = appData.history[id];
+                        const wrongs = rec ? rec.wrong : 0;
+                        let bg = 'transparent'; // 默认
+                        let color = 'inherit';
+
+                        if (rec) {
+                             if (wrongs >= 8) { bg = 'var(--heat-4)'; color='#fff'; }
+                             else if (wrongs >= 5) { bg = 'var(--heat-3)'; color='#fff'; }
+                             else if (wrongs >= 3) { bg = 'var(--heat-2)'; }
+                             else if (wrongs >= 1) { bg = 'var(--heat-1)'; }
+                             else { bg = 'var(--heat-0)'; } // 0错，但是做过
+                        }
+
+                        return `<span class="heat-span" style="background:${bg}; color:${color}">${match}</span>`;
+                    } else {
+                        // 练习模式
+                        const sess = appData.sessionState[id];
+                        let cls = 'cloze masked';
+                        let action = `onclick="enterFocus(event, this, '${id}')"`;
+                        
+                        if (sess === 'correct') { cls = 'cloze correct'; action = ''; }
+                        if (sess === 'wrong') { cls = 'cloze wrong'; action = ''; }
+                        
+                        return `<span id="${id}" class="${cls}" ${action}>${match}</span>`;
+                    }
+                }
+                return match;
+            }).replace(/\n/g, '<br>');
+        }
+
+        /* ================= 交互逻辑 (专注模式 & 计时) ================= */
+        window.enterFocus = function(e, el, id) {
+            if (isFocusMode) return;
+            e.stopPropagation();
+
+            isFocusMode = true;
+            activeElement = el;
+            startTime = Date.now(); // 开始计时
+
+            // UI
+            el.classList.remove('masked');
+            el.classList.add('active-focus');
+            document.getElementById('focus-overlay').classList.add('active');
+
+            // Menu Position
+            const menu = document.getElementById('decision-menu');
+            const rect = el.getBoundingClientRect();
+            menu.style.display = 'block';
+            
+            // 简单智能定位
+            let top = rect.top - 60;
+            let left = rect.left + (rect.width/2) - 80;
+            if (top < 20) top = rect.bottom + 20;
+            if (left < 10) left = 10;
+            
+            menu.style.top = top + 'px';
+            menu.style.left = left + 'px';
+        };
+
+        window.submitJudgment = function(isCorrect) {
+            if (!activeElement) return;
+            const duration = Date.now() - startTime; // 计算耗时
+            const id = activeElement.id;
+
+            // 更新历史数据
+            if (!appData.history[id]) {
+                appData.history[id] = { wrong: 0, correct: 0, totalTime: 0, attempts: 0 };
+            }
+            const rec = appData.history[id];
+            rec.attempts++;
+            rec.totalTime += duration;
+            if (isCorrect) rec.correct++;
+            else rec.wrong++;
+
+            // 更新会话状态
+            appData.sessionState[id] = isCorrect ? 'correct' : 'wrong';
+
+            // 持久化
+            saveData();
+            updateStats();
+
+            // UI反馈
+            playTone(isCorrect);
+            activeElement.classList.remove('active-focus');
+            activeElement.classList.add(isCorrect ? 'correct' : 'wrong');
+            activeElement.onclick = null;
+
+            exitFocus();
+        };
+
+        function exitFocus() {
+            isFocusMode = false;
+            activeElement = null;
+            document.getElementById('focus-overlay').classList.remove('active');
+            document.getElementById('decision-menu').style.display = 'none';
+        }
+
+        /* ================= 统计计算 ================= */
+        function updateStats() {
+            let totalWrongs = 0;
+            let totalAttempts = 0;
+            let totalTime = 0;
+
+            Object.values(appData.history).forEach(rec => {
+                totalWrongs += rec.wrong;
+                totalAttempts += rec.attempts;
+                totalTime += rec.totalTime;
+            });
+
+            // 1. 遗忘次数
+            document.getElementById('disp-wrong-count').textContent = totalWrongs;
+
+            // 2. 错误率
+            let rate = 0;
+            if (totalAttempts > 0) {
+                rate = Math.round((totalWrongs / totalAttempts) * 100);
+            }
+            const rateEl = document.getElementById('disp-error-rate');
+            rateEl.textContent = rate + '%';
+            rateEl.className = 'stat-value ' + (rate > 20 ? 'bad' : 'good');
+
+            // 3. 平均耗时
+            let avg = 0;
+            if (totalAttempts > 0) {
+                avg = (totalTime / totalAttempts / 1000).toFixed(1);
+            }
+            document.getElementById('disp-avg-time').textContent = avg + 's';
+        }
+
+        /* ================= 设置 & 热力图 ================= */
+        // 打开热力图
+        window.openHeatmap = function() {
+            if (isFocusMode) return;
+            const q = questions[appData.currentIndex];
+            const html = `
+                <h3 style="margin-bottom:15px; font-weight:700;">${q.title}</h3>
+                <div style="line-height:2.4;">${processText(q.content, appData.currentIndex, 'heatmap')}</div>
+            `;
+            document.getElementById('heatmap-content').innerHTML = html;
+            document.getElementById('heatmap-modal').classList.add('open');
+        };
+
+        // 打开设置
+        window.openSettings = function() {
+            if (isFocusMode) return;
+            // 载入当前值
+            const val = appData.config.maskRate * 100;
+            document.getElementById('rate-slider').value = val;
+            updateSliderUI(val);
+            document.getElementById('settings-modal').classList.add('open');
+        };
+
+        window.closeModal = function(id) {
+            document.getElementById(id).classList.remove('open');
+        };
+
+        window.updateSliderUI = function(val) {
+            document.getElementById('setting-rate-val').textContent = val + '%';
+        };
+
+        window.saveSettings = function() {
+            const newVal = document.getElementById('rate-slider').value / 100;
+            
+            // 如果改变了遮挡率，重置视图（会话状态清空，因为ID分布变了）
+            if (newVal !== appData.config.maskRate) {
+                appData.config.maskRate = newVal;
+                appData.sessionState = {}; // 清空视觉上的对错，重新生成题目
+                saveData();
+                renderStage();
+            }
+            closeModal('settings-modal');
+        };
+
+        window.resetAllData = function() {
+            if(confirm('警告：这将删除所有记忆历史、热力图数据和设置，无法恢复！确认吗？')) {
+                localStorage.removeItem(STORAGE_KEY);
+                location.reload();
+            }
+        };
+
+        /* ================= 工具函数 ================= */
+        function changePage(delta) {
+            if (isFocusMode) return;
+            const next = appData.currentIndex + delta;
+            if (next >= 0 && next < questions.length) {
+                appData.currentIndex = next;
+                appData.sessionState = {}; // 翻页重置当前页的UI状态
+                saveData();
+                renderStage();
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+        }
+
+        // 音效
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playTone(isSuccess) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            const now = audioCtx.currentTime;
+            if (isSuccess) {
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(1000, now + 0.1);
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+            } else {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(150, now);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+            }
+            osc.start(now);
+            osc.stop(now + 0.3);
+        }
+
+        // 启动
+        init();
+
+    </script>
+</body>
+</html>
