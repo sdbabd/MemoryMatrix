@@ -313,20 +313,6 @@
             font-size: 0.85rem;
         }
 
-        .reset-options {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-
-        .reset-option {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-        }
-
         .reset-buttons {
             display: flex;
             gap: 12px;
@@ -351,16 +337,6 @@
 
         .btn-reset.yes:hover {
             background: #2563eb;
-            transform: translateY(-1px);
-        }
-
-        .btn-reset.warning {
-            background: var(--error);
-            color: white;
-        }
-
-        .btn-reset.warning:hover {
-            background: #dc2626;
             transform: translateY(-1px);
         }
 
@@ -477,7 +453,7 @@
                 </div>
                 <input type="range" id="rate-slider" min="20" max="90" step="10" value="50" oninput="updateSliderUI(this.value)">
                 <p style="font-size:0.85rem; color:#9ca3af; margin-top:10px;">
-                    注意：修改遮挡率将重新生成所有题目，并清空答题状态，但会保留您的历史记忆数据（热力图数据）。
+                    注意：修改遮挡率将重新生成所有题目，并清空当前的"本次练习状态"，但会保留您的历史记忆数据（热力图数据）。
                 </p>
             </div>
 
@@ -495,24 +471,14 @@
         <div class="reset-dialog">
             <div class="reset-icon">📚</div>
             <h3>题目已做完</h3>
-            <p>选择重置方式：</p>
-            <div class="reset-options">
-                <div class="reset-option">
-                    <button class="btn-reset yes" onclick="confirmReset()">🔄 重新开始练习</button>
-                    <small>保留热力图数据，只重置答题状态</small>
-                </div>
-                <div class="reset-option">
-                    <button class="btn-reset warning" onclick="confirmFullReset()">📊 完全重置统计</button>
-                    <small>清空所有数据，包括统计和热力图</small>
-                </div>
-                <div class="reset-option">
-                    <button class="btn-reset no" onclick="cancelReset()">👁️ 继续查看</button>
-                    <small>不做任何更改</small>
-                </div>
+            <p>是否重新开始练习？<br><small>您的历史记忆数据（热力图）将被保留</small></p>
+            <div class="reset-buttons">
+                <button class="btn-reset yes" onclick="confirmReset()">重新开始</button>
+                <button class="btn-reset no" onclick="cancelReset()">继续查看</button>
             </div>
         </div>
     </div>
-
+    
     <script>
         /* ================= 数据层 (LaTeX 清洗后) ================= */
         const STORAGE_KEY = 'memory_pro_latex_v6';
@@ -896,22 +862,26 @@
         }
 
         window.confirmReset = function() {
-            // Reset to first question, clear progress, but keep history
-            appData.currentIndex = 0;
-            appData.progress = {};
-            saveData();
-            renderStage();
-            hideResetDialog();
-        };
-
-        window.confirmFullReset = function() {
-            // Completely reset all data including history and statistics
+            // Reset to first question and clear all data (progress + history)
             appData.currentIndex = 0;
             appData.progress = {};
             appData.history = {};
             saveData();
             renderStage();
-            updateStats();
+            updateStats(); // 清空统计显示
+            hideResetDialog();
+        };
+
+        window.confirmFullReset = function() {
+            // Reset statistics only, keep progress
+            appData.currentIndex = 0;
+            // 重置每个history记录的统计信息，但保留记录结构
+            Object.keys(appData.history).forEach(id => {
+                appData.history[id] = { wrong: 0, correct: 0, totalTime: 0, attempts: 0 };
+            });
+            saveData();
+            renderStage();
+            updateStats(); // 更新统计显示为0，但保持答题状态
             hideResetDialog();
         };
 
