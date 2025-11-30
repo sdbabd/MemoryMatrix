@@ -313,6 +313,20 @@
             font-size: 0.85rem;
         }
 
+        .reset-options {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .reset-option {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
         .reset-buttons {
             display: flex;
             gap: 12px;
@@ -337,6 +351,16 @@
 
         .btn-reset.yes:hover {
             background: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .btn-reset.warning {
+            background: var(--error);
+            color: white;
+        }
+
+        .btn-reset.warning:hover {
+            background: #dc2626;
             transform: translateY(-1px);
         }
 
@@ -453,7 +477,7 @@
                 </div>
                 <input type="range" id="rate-slider" min="20" max="90" step="10" value="50" oninput="updateSliderUI(this.value)">
                 <p style="font-size:0.85rem; color:#9ca3af; margin-top:10px;">
-                    注意：修改遮挡率将重新生成所有题目，并清空当前的"本次练习状态"，但会保留您的历史记忆数据（热力图数据）。
+                    注意：修改遮挡率将重新生成所有题目，并清空答题状态，但会保留您的历史记忆数据（热力图数据）。
                 </p>
             </div>
 
@@ -471,10 +495,20 @@
         <div class="reset-dialog">
             <div class="reset-icon">📚</div>
             <h3>题目已做完</h3>
-            <p>是否重新开始练习？<br><small>您的历史记忆数据（热力图）将被保留</small></p>
-            <div class="reset-buttons">
-                <button class="btn-reset yes" onclick="confirmReset()">重新开始</button>
-                <button class="btn-reset no" onclick="cancelReset()">继续查看</button>
+            <p>选择重置方式：</p>
+            <div class="reset-options">
+                <div class="reset-option">
+                    <button class="btn-reset yes" onclick="confirmReset()">🔄 重新开始练习</button>
+                    <small>保留热力图数据，只重置答题状态</small>
+                </div>
+                <div class="reset-option">
+                    <button class="btn-reset warning" onclick="confirmFullReset()">📊 完全重置统计</button>
+                    <small>清空所有数据，包括统计和热力图</small>
+                </div>
+                <div class="reset-option">
+                    <button class="btn-reset no" onclick="cancelReset()">👁️ 继续查看</button>
+                    <small>不做任何更改</small>
+                </div>
             </div>
         </div>
     </div>
@@ -554,8 +588,8 @@
         let appData = {
             config: { maskRate: 0.5 },
             currentIndex: 0,
-            history: {}, 
-            sessionState: {} 
+            history: {},
+            progress: {} // 持久化答题状态：{id: 'correct'|'wrong'|null}
         };
 
         let isFocusMode = false;
@@ -569,6 +603,7 @@
                 const parsed = JSON.parse(saved);
                 appData.config = parsed.config || { maskRate: 0.5 };
                 appData.history = parsed.history || {};
+                appData.progress = parsed.progress || {};
                 appData.currentIndex = parsed.currentIndex || 0;
             }
             if (appData.currentIndex >= questions.length) appData.currentIndex = 0;
@@ -690,13 +725,13 @@
                 // 热力图模式直接返回内容，因为之后会统一渲染KaTeX
                 return `<span class="heat-span" style="background:${bg}; color:${color}">${content}</span>`;
             } else {
-                // 练习模式
-                const sess = appData.sessionState[id];
+                // 练习模式 - 使用持久化进度数据
+                const progress = appData.progress[id];
                 let cls = 'cloze masked';
                 let action = `onclick="enterFocus(event, this, '${id}')"`;
-                
-                if (sess === 'correct') { cls = 'cloze correct'; action = ''; }
-                if (sess === 'wrong') { cls = 'cloze wrong'; action = ''; }
+
+                if (progress === 'correct') { cls = 'cloze correct'; action = ''; }
+                if (progress === 'wrong') { cls = 'cloze wrong'; action = ''; }
                 
                 // 如果是公式，内容就是 $...$，KaTeX渲染后会生成复杂的span结构。
                 // CSS 中 .cloze.masked .katex { opacity: 0 } 会隐藏它
@@ -742,7 +777,8 @@
             rec.totalTime += duration;
             if (isCorrect) rec.correct++; else rec.wrong++;
 
-            appData.sessionState[id] = isCorrect ? 'correct' : 'wrong';
+            // 持久化保存答题状态
+            appData.progress[id] = isCorrect ? 'correct' : 'wrong';
             saveData();
             updateStats();
             playTone(isCorrect);
@@ -816,7 +852,7 @@
             const newVal = document.getElementById('rate-slider').value / 100;
             if (newVal !== appData.config.maskRate) {
                 appData.config.maskRate = newVal;
-                appData.sessionState = {}; 
+                appData.progress = {}; // 清空进度，因为遮挡模式改变了
                 saveData();
                 renderStage();
             }
@@ -860,11 +896,22 @@
         }
 
         window.confirmReset = function() {
-            // Reset to first question, clear session state, but keep history
+            // Reset to first question, clear progress, but keep history
             appData.currentIndex = 0;
-            appData.sessionState = {};
+            appData.progress = {};
             saveData();
             renderStage();
+            hideResetDialog();
+        };
+
+        window.confirmFullReset = function() {
+            // Completely reset all data including history and statistics
+            appData.currentIndex = 0;
+            appData.progress = {};
+            appData.history = {};
+            saveData();
+            renderStage();
+            updateStats();
             hideResetDialog();
         };
 
