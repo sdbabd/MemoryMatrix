@@ -361,8 +361,7 @@
             .stats-dash { padding: 10px; }
             .stat-value { font-size: 1rem; }
             .reset-dialog {
-                padding: 24px;
-                margin: 20px;
+                padding: 24px;  
                 min-width: auto;
             }
         }
@@ -619,12 +618,25 @@
             }, 200);
         }
 
+        // --- 稳定随机数生成器 ---
+        function getSeededRandom(qIdx) {
+            // 为每个题目生成固定的随机种子
+            let seed = qIdx * 1000 + 1;
+            return function() {
+                seed = (seed * 9301 + 49297) % 233280;
+                return seed / 233280;
+            };
+        }
+
         // --- 核心分词算法：混合 LaTeX 和 普通文本 ---
         function processMixedText(text, qIdx, mode) {
+            // 使用稳定随机数生成器
+            const random = getSeededRandom(qIdx);
+
             // 正则：分割 LaTeX 公式 ($...$)
             // 使用 capturing group () 使得 split 保留分隔符
             const parts = text.split(/(\$[^$]+\$)/g);
-            
+
             let mCount = 0;
 
             // 遍历片段
@@ -632,9 +644,8 @@
                 // 情况A: 是 LaTeX 公式
                 if (part.startsWith('$') && part.endsWith('$')) {
                     // 判断是否需要遮挡 (公式作为整体遮挡)
-                    // 为了ID一致性，我们这里简单递增mCount。
-                    // 理想情况下应该对内容做hash，但只要题目内容不变，顺序一致即可。
-                    const shouldMask = Math.random() < appData.config.maskRate; 
+                    // 使用稳定随机数
+                    const shouldMask = random() < appData.config.maskRate; 
                     
                     if (shouldMask) {
                         return createMaskElement(part, qIdx, mCount++, mode, true); // true表示是公式
@@ -647,8 +658,8 @@
                 else {
                     // 内部再进行分词处理
                     return part.replace(/([^，。；：、？！\s\n\(\)（）<>=]+)/g, (match) => {
-                        // 文本遮挡逻辑
-                        let isMasked = Math.random() < appData.config.maskRate && match.length > 1;
+                        // 文本遮挡逻辑 - 使用稳定随机数
+                        let isMasked = random() < appData.config.maskRate && match.length > 1;
                         if (isMasked) {
                             return createMaskElement(match, qIdx, mCount++, mode, false);
                         }
@@ -831,7 +842,7 @@
 
             if (next >= 0 && next < questions.length) {
                 appData.currentIndex = next;
-                appData.sessionState = {};
+               
                 saveData();
                 renderStage();
             }
