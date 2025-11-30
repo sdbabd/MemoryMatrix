@@ -350,6 +350,7 @@
             transform: translateY(-1px);
         }
 
+        
         .btn-reset:active {
             transform: scale(0.98);
         }
@@ -554,8 +555,13 @@
         let appData = {
             config: { maskRate: 0.5 },
             currentIndex: 0,
-            history: {},
-            progress: {} // 持久化答题状态：{id: 'correct'|'wrong'|null}
+            history: {},            // 累计历史记录（热力图用）
+            progress: {},           // 当前练习答题状态：{id: 'correct'|'wrong'|null}
+            sessionStats: {         // 当前会话统计数据
+                totalWrongs: 0,
+                totalAttempts: 0,
+                totalTime: 0
+            }
         };
 
         let isFocusMode = false;
@@ -571,6 +577,11 @@
                 appData.history = parsed.history || {};
                 appData.progress = parsed.progress || {};
                 appData.currentIndex = parsed.currentIndex || 0;
+                appData.sessionStats = parsed.sessionStats || {
+                    totalWrongs: 0,
+                    totalAttempts: 0,
+                    totalTime: 0
+                };
             }
             if (appData.currentIndex >= questions.length) appData.currentIndex = 0;
 
@@ -737,11 +748,17 @@
             const duration = Date.now() - startTime;
             const id = activeElement.id;
 
+            // 更新累计历史记录（热力图用）
             if (!appData.history[id]) appData.history[id] = { wrong: 0, correct: 0, totalTime: 0, attempts: 0 };
             const rec = appData.history[id];
             rec.attempts++;
             rec.totalTime += duration;
             if (isCorrect) rec.correct++; else rec.wrong++;
+
+            // 更新当前会话统计
+            appData.sessionStats.totalAttempts++;
+            appData.sessionStats.totalTime += duration;
+            if (!isCorrect) appData.sessionStats.totalWrongs++;
 
             // 持久化保存答题状态
             appData.progress[id] = isCorrect ? 'correct' : 'wrong';
@@ -764,18 +781,14 @@
 
         /* ================= 统计 & 设置 ================= */
         function updateStats() {
-            let totalWrongs = 0;
-            let totalAttempts = 0;
-            let totalTime = 0;
-
-            Object.values(appData.history).forEach(rec => {
-                totalWrongs += rec.wrong;
-                totalAttempts += rec.attempts;
-                totalTime += rec.totalTime;
-            });
+            // 使用当前会话统计数据
+            const sessionStats = appData.sessionStats;
+            const totalWrongs = sessionStats.totalWrongs;
+            const totalAttempts = sessionStats.totalAttempts;
+            const totalTime = sessionStats.totalTime;
 
             document.getElementById('disp-wrong-count').textContent = totalWrongs;
-            
+
             let rate = totalAttempts > 0 ? Math.round((totalWrongs / totalAttempts) * 100) : 0;
             const rateEl = document.getElementById('disp-error-rate');
             rateEl.textContent = rate + '%';
@@ -862,26 +875,17 @@
         }
 
         window.confirmReset = function() {
-            // Reset to first question and clear all data (progress + history)
+            // Reset to first question and clear progress + sessionStats, keep history (热力图)
             appData.currentIndex = 0;
             appData.progress = {};
-            appData.history = {};
+            appData.sessionStats = {
+                totalWrongs: 0,
+                totalAttempts: 0,
+                totalTime: 0
+            };
             saveData();
             renderStage();
             updateStats(); // 清空统计显示
-            hideResetDialog();
-        };
-
-        window.confirmFullReset = function() {
-            // Reset statistics only, keep progress
-            appData.currentIndex = 0;
-            // 重置每个history记录的统计信息，但保留记录结构
-            Object.keys(appData.history).forEach(id => {
-                appData.history[id] = { wrong: 0, correct: 0, totalTime: 0, attempts: 0 };
-            });
-            saveData();
-            renderStage();
-            updateStats(); // 更新统计显示为0，但保持答题状态
             hideResetDialog();
         };
 
