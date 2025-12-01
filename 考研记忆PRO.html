@@ -555,9 +555,8 @@
         let appData = {
             config: { maskRate: 0.5 },
             currentIndex: 0,
-            currentSessionId: null,  // 当前练习会话ID，用于遮挡位置随机化
-            history: {},            // 累计历史记录（热力图用）：{id: { wrong, correct, totalTime, attempts }}
-            maskState: {},          // 当前练习的遮挡状态：{id: { isMasked, answerState }}
+            history: {},            // 累计历史记录（热力图用）
+            progress: {},           // 当前练习答题状态：{id: 'correct'|'wrong'|null}
             sessionStats: {         // 当前会话统计数据
                 totalWrongs: 0,
                 totalAttempts: 0,
@@ -569,32 +568,6 @@
         let activeElement = null;
         let startTime = 0;
 
-        /* ================= 辅助函数 ================= */
-        function generateSessionId() {
-            return Date.now() + Math.random();
-        }
-
-        function initNewSession() {
-            appData.currentSessionId = generateSessionId();
-            appData.maskState = {}; // 清空遮挡状态
-        }
-
-        /* ================= 数据迁移函数 ================= */
-        function migrateOldData(parsed) {
-            // 如果存在旧的 progress 数据，迁移到新的 maskState 结构
-            if (parsed.progress && !parsed.maskState) {
-                const migratedMaskState = {};
-                for (const [id, state] of Object.entries(parsed.progress)) {
-                    migratedMaskState[id] = {
-                        isMasked: false, // 已答过的题目不再遮挡
-                        answerState: state // 'correct' 或 'wrong'
-                    };
-                }
-                return migratedMaskState;
-            }
-            return parsed.maskState || {};
-        }
-
         /* ================= 初始化 ================= */
         function init() {
             const saved = localStorage.getItem(STORAGE_KEY);
@@ -602,19 +575,14 @@
                 const parsed = JSON.parse(saved);
                 appData.config = parsed.config || { maskRate: 0.5 };
                 appData.history = parsed.history || {};
-                appData.maskState = migrateOldData(parsed);
+                appData.progress = parsed.progress || {};
                 appData.currentIndex = parsed.currentIndex || 0;
-                appData.currentSessionId = parsed.currentSessionId || generateSessionId();
                 appData.sessionStats = parsed.sessionStats || {
                     totalWrongs: 0,
                     totalAttempts: 0,
                     totalTime: 0
                 };
-            } else {
-                // 新用户，初始化会话
-                initNewSession();
             }
-
             if (appData.currentIndex >= questions.length) appData.currentIndex = 0;
 
             renderStage();
@@ -662,79 +630,50 @@
             }, 200);
         }
 
-        // --- 增强随机数生成器 ---
-        function getSeededRandom(qIdx, sessionId) {
-            // 组合题目索引、会话ID和时间戳，确保每次练习遮挡位置不同
-            let seed = qIdx * 1000 + sessionId * 1000000 + 1;
+        // --- 稳定随机数生成器 ---
+        function getSeededRandom(qIdx) {
+            // 为每个题目生成固定的随机种子
+            let seed = qIdx * 1000 + 1;
             return function() {
                 seed = (seed * 9301 + 49297) % 233280;
                 return seed / 233280;
             };
         }
 
-        // --- 核心分词算法：分离热力图和遮挡逻辑 ---
+        // --- 核心分词算法：混合 LaTeX 和 普通文本 ---
         function processMixedText(text, qIdx, mode) {
-            if (mode === 'heatmap') {
-                return processHeatmapText(text, qIdx);
-            } else {
-                return processPracticeText(text, qIdx);
-            }
-        }
-
-        // --- 热力图模式处理逻辑 ---
-        function processHeatmapText(text, qIdx) {
-            // 正则：分割 LaTeX 公式 ($...$)
-            const parts = text.split(/(\$[^$]+\$)/g);
-            let mCount = 0;
-
-            return parts.map(part => {
-                // LaTeX 公式
-                if (part.startsWith('$') && part.endsWith('$')) {
-                    const id = `q${qIdx}_m${mCount++}`;
-                    return createHeatmapElement(part, id);
-                }
-                // 普通文本
-                else {
-                    return part.replace(/([^，。；：、？！\s\n\(\)（）<>=]+)/g, (match) => {
-                        if (match.length > 1) {
-                            const id = `q${qIdx}_m${mCount++}`;
-                            return createHeatmapElement(match, id);
-                        }
-                        return match;
-                    }).replace(/\n/g, '<br>');
-                }
-            }).join('');
-        }
-
-        // --- 练习模式处理逻辑 ---
-        function processPracticeText(text, qIdx) {
-            // 使用会话相关的随机数生成器
-            const random = getSeededRandom(qIdx, appData.currentSessionId);
+            // 使用稳定随机数生成器
+            const random = getSeededRandom(qIdx);
 
             // 正则：分割 LaTeX 公式 ($...$)
+            // 使用 capturing group () 使得 split 保留分隔符
             const parts = text.split(/(\$[^$]+\$)/g);
+
             let mCount = 0;
 
+            // 遍历片段
             return parts.map(part => {
-                // LaTeX 公式
+                // 情况A: 是 LaTeX 公式
                 if (part.startsWith('$') && part.endsWith('$')) {
-                    const shouldMask = random() < appData.config.maskRate;
-
+                    // 判断是否需要遮挡 (公式作为整体遮挡)
+                    // 使用稳定随机数
+                    const shouldMask = random() < appData.config.maskRate; 
+                    
                     if (shouldMask) {
-                        const id = `q${qIdx}_m${mCount++}`;
-                        return createMaskElement(part, id, true); // true表示是公式
+                        return createMaskElement(part, qIdx, mCount++, mode, true); // true表示是公式
                     } else {
                         // 不遮挡，直接返回原公式文本，稍后由KaTeX渲染
-                        return part;
+                        return part; 
                     }
-                }
-                // 普通文本
+                } 
+                // 情况B: 是普通文本
                 else {
+                    // 内部再进行分词处理
                     return part.replace(/([^，。；：、？！\s\n\(\)（）<>=]+)/g, (match) => {
+                        // 文本遮挡逻辑 - 使用稳定随机数
                         let isMasked = random() < appData.config.maskRate && match.length > 1;
                         if (isMasked) {
-                            const id = `q${qIdx}_m${mCount++}`;
-                            return createMaskElement(match, id, false);
+                            return createMaskElement(match, qIdx, mCount++, mode, false);
                         }
                         return match;
                     }).replace(/\n/g, '<br>');
@@ -742,45 +681,39 @@
             }).join('');
         }
 
-        // --- 热力图元素生成函数 ---
-        function createHeatmapElement(content, id) {
-            const rec = appData.history[id];
-            const wrongs = rec ? rec.wrong : 0;
-            let bg = 'transparent';
-            let color = 'inherit';
+        // 生成遮挡块的统一函数
+        function createMaskElement(content, qIdx, mIdx, mode, isMath) {
+            const id = `q${qIdx}_m${mIdx}`;
+            
+            if (mode === 'heatmap') {
+                const rec = appData.history[id];
+                const wrongs = rec ? rec.wrong : 0;
+                let bg = 'transparent';
+                let color = 'inherit';
 
-            if (rec) {
-                 if (wrongs >= 8) { bg = 'var(--heat-4)'; color='#fff'; }
-                 else if (wrongs >= 5) { bg = 'var(--heat-3)'; color='#fff'; }
-                 else if (wrongs >= 3) { bg = 'var(--heat-2)'; }
-                 else if (wrongs >= 1) { bg = 'var(--heat-1)'; }
-                 else { bg = 'var(--heat-0)'; }
-            }
-
-            // 热力图模式直接返回内容，因为之后会统一渲染KaTeX
-            return `<span class="heat-span" style="background:${bg}; color:${color}">${content}</span>`;
-        }
-
-        // --- 练习模式遮挡元素生成函数 ---
-        function createMaskElement(content, id, isMath) {
-            const maskState = appData.maskState[id];
-            let cls = 'cloze masked';
-            let action = `onclick="enterFocus(event, this, '${id}')"`;
-
-            // 如果该位置已经有遮挡状态，使用现有状态
-            if (maskState && maskState.answerState) {
-                if (maskState.answerState === 'correct') {
-                    cls = 'cloze correct';
-                    action = '';
-                } else if (maskState.answerState === 'wrong') {
-                    cls = 'cloze wrong';
-                    action = '';
+                if (rec) {
+                     if (wrongs >= 8) { bg = 'var(--heat-4)'; color='#fff'; }
+                     else if (wrongs >= 5) { bg = 'var(--heat-3)'; color='#fff'; }
+                     else if (wrongs >= 3) { bg = 'var(--heat-2)'; }
+                     else if (wrongs >= 1) { bg = 'var(--heat-1)'; }
+                     else { bg = 'var(--heat-0)'; }
                 }
-            }
+                
+                // 热力图模式直接返回内容，因为之后会统一渲染KaTeX
+                return `<span class="heat-span" style="background:${bg}; color:${color}">${content}</span>`;
+            } else {
+                // 练习模式 - 使用持久化进度数据
+                const progress = appData.progress[id];
+                let cls = 'cloze masked';
+                let action = `onclick="enterFocus(event, this, '${id}')"`;
 
-            // 如果是公式，内容就是 $...$，KaTeX渲染后会生成复杂的span结构。
-            // CSS 中 .cloze.masked .katex { opacity: 0 } 会隐藏它
-            return `<span id="${id}" class="${cls}" ${action}>${content}</span>`;
+                if (progress === 'correct') { cls = 'cloze correct'; action = ''; }
+                if (progress === 'wrong') { cls = 'cloze wrong'; action = ''; }
+                
+                // 如果是公式，内容就是 $...$，KaTeX渲染后会生成复杂的span结构。
+                // CSS 中 .cloze.masked .katex { opacity: 0 } 会隐藏它
+                return `<span id="${id}" class="${cls}" ${action}>${content}</span>`;
+            }
         }
 
         /* ================= 交互逻辑 ================= */
@@ -822,15 +755,13 @@
             rec.totalTime += duration;
             if (isCorrect) rec.correct++; else rec.wrong++;
 
-            // 更新遮挡状态
-            if (!appData.maskState[id]) appData.maskState[id] = { isMasked: true, answerState: null };
-            appData.maskState[id].answerState = isCorrect ? 'correct' : 'wrong';
-
             // 更新当前会话统计
             appData.sessionStats.totalAttempts++;
             appData.sessionStats.totalTime += duration;
             if (!isCorrect) appData.sessionStats.totalWrongs++;
 
+            // 持久化保存答题状态
+            appData.progress[id] = isCorrect ? 'correct' : 'wrong';
             saveData();
             updateStats();
             playTone(isCorrect);
@@ -900,8 +831,7 @@
             const newVal = document.getElementById('rate-slider').value / 100;
             if (newVal !== appData.config.maskRate) {
                 appData.config.maskRate = newVal;
-                appData.maskState = {}; // 清空遮挡状态，因为遮挡模式改变了
-                initNewSession(); // 重新生成会话ID，确保遮挡位置变化
+                appData.progress = {}; // 清空进度，因为遮挡模式改变了
                 saveData();
                 renderStage();
             }
@@ -945,9 +875,9 @@
         }
 
         window.confirmReset = function() {
-            // 重置到第一题，清空遮挡状态和会话统计，保留历史记录（热力图）
+            // Reset to first question and clear progress + sessionStats, keep history (热力图)
             appData.currentIndex = 0;
-            initNewSession(); // 生成新的会话ID，确保遮挡位置变化
+            appData.progress = {};
             appData.sessionStats = {
                 totalWrongs: 0,
                 totalAttempts: 0,
