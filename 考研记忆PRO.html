@@ -6,10 +6,13 @@
     <title>考研记忆 Pro</title>
     
     <!-- KaTeX CSS -->
-    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <link rel="stylesheet" href="https://npm.elemecdn.com/katex@0.16.9/dist/katex.min.css"
+          onerror="this.href='https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css'">
     <!-- KaTeX JS -->
-    <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
-    <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+    <script src="https://npm.elemecdn.com/katex@0.16.9/dist/katex.min.js"
+            onerror="this.src='https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js'"></script>
+    <script src="https://npm.elemecdn.com/katex@0.16.9/dist/contrib/auto-render.min.js"
+            onerror="this.src='https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js'"></script>
 
     <style>
         :root {
@@ -603,14 +606,29 @@
                 
                 container.innerHTML = html;
                 
-                // 2. 调用 KaTeX 渲染 DOM 中的公式
-                renderMathInElement(document.getElementById('q-content'), {
-                    delimiters: [
-                        {left: "$$", right: "$$", display: true},
-                        {left: "$", right: "$", display: false}
-                    ],
-                    throwOnError: false
-                });
+                // 2. 等待 KaTeX 加载完成后渲染公式
+                if (typeof renderMathInElement === 'function') {
+                    renderMathInElement(document.getElementById('q-content'), {
+                        delimiters: [
+                            {left: "$$", right: "$$", display: true},
+                            {left: "$", right: "$", display: false}
+                        ],
+                        throwOnError: false
+                    });
+                } else {
+                    // KaTeX 还未加载，等待后重试
+                    setTimeout(() => {
+                        if (typeof renderMathInElement === 'function') {
+                            renderMathInElement(document.getElementById('q-content'), {
+                                delimiters: [
+                                    {left: "$$", right: "$$", display: true},
+                                    {left: "$", right: "$", display: false}
+                                ],
+                                throwOnError: false
+                            });
+                        }
+                    }, 1000);
+                }
 
                 container.classList.remove('fade-out');
 
@@ -808,10 +826,21 @@
             `;
             document.getElementById('heatmap-content').innerHTML = html;
             
-            // 2. 渲染 KaTeX
-            renderMathInElement(document.getElementById('heatmap-body-content'), {
-                delimiters: [{left: "$", right: "$", display: false}]
-            });
+            // 2. 等待 KaTeX 加载完成后渲染公式
+            if (typeof renderMathInElement === 'function') {
+                renderMathInElement(document.getElementById('heatmap-body-content'), {
+                    delimiters: [{left: "$", right: "$", display: false}]
+                });
+            } else {
+                // KaTeX 还未加载，等待后重试
+                setTimeout(() => {
+                    if (typeof renderMathInElement === 'function') {
+                        renderMathInElement(document.getElementById('heatmap-body-content'), {
+                            delimiters: [{left: "$", right: "$", display: false}]
+                        });
+                    }
+                }, 1000);
+            }
             
             document.getElementById('heatmap-modal').classList.add('open');
         };
@@ -917,7 +946,16 @@
             osc.stop(now + 0.3);
         }
 
-        init();
+        // 确保 KaTeX 库加载完成后再初始化应用
+        function initApp() {
+            if (typeof renderMathInElement === 'function') {
+                init();
+            } else {
+                setTimeout(initApp, 100);
+            }
+        }
+
+        initApp();
     </script>
 </body>
 </html>
